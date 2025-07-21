@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: api_malicious_link_v2_image
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./Homepage_Cache:/app/Homepage_Cache
+    container_name: api_malicious_link_v2_container
+
+    # Run on GPU
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
