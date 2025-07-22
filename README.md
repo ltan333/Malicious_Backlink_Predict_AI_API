@@ -2,6 +2,8 @@
 
 This project uses a model to predict malicious backlinks.
 
+pip install --index-url https://download.pytorch.org/whl/cu121 -r requirements.txt
+
 ---
 ## 📂 File Structure
 
