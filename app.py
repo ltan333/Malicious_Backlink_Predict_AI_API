@@ -18,45 +18,45 @@ from pydantic import BaseModel
 
 # --- CACHE ---
 CACHE_FILE = os.path.join("Homepage_Cache", "homepage_cache.json")
-homepage_cache = {}
-cache_lock = AsyncLock()
-cache_updated = False
+# homepage_cache = {}
+# cache_lock = AsyncLock()
+# cache_updated = False
 
-# --- MODEL ---
-model = None
-tokenizer = None
+# # --- MODEL ---
+# model = None
+# tokenizer = None
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-autocast_ctx = torch.amp.autocast(device_type="cuda") if torch.cuda.is_available() else nullcontext()
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# autocast_ctx = torch.amp.autocast(device_type="cuda") if torch.cuda.is_available() else nullcontext()
 
-label2id = {
-    "government": 0, "education": 1, "technology": 2, "tourism": 3,
-    "ecommerce": 4, "delivery": 5, "health": 6, "finance": 7,
-    "media": 8, "nonprofit": 9, "gambling": 10, "movies": 11
-}
-id2label = {v: k for k, v in label2id.items()}
+# label2id = {
+#     "government": 0, "education": 1, "technology": 2, "tourism": 3,
+#     "ecommerce": 4, "delivery": 5, "health": 6, "finance": 7,
+#     "media": 8, "nonprofit": 9, "gambling": 10, "movies": 11
+# }
+# id2label = {v: k for k, v in label2id.items()}
 
-class TextDataset(Dataset):
-    def __init__(self, texts, tokenizer, max_length=64):
-        self.texts = texts
-        self.tokenizer = tokenizer
-        self.max_length = max_length
+# class TextDataset(Dataset):
+#     def __init__(self, texts, tokenizer, max_length=64):
+#         self.texts = texts
+#         self.tokenizer = tokenizer
+#         self.max_length = max_length
 
-    def __len__(self):
-        return len(self.texts)
+#     def __len__(self):
+#         return len(self.texts)
 
-    def __getitem__(self, idx):
-        encoding = self.tokenizer(
-            self.texts[idx],
-            max_length=self.max_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt"
-        )
-        return {
-            "input_ids": encoding["input_ids"].squeeze(),
-            "attention_mask": encoding["attention_mask"].squeeze()
-        }
+#     def __getitem__(self, idx):
+#         encoding = self.tokenizer(
+#             self.texts[idx],
+#             max_length=self.max_length,
+#             padding="max_length",
+#             truncation=True,
+#             return_tensors="pt"
+#         )
+#         return {
+#             "input_ids": encoding["input_ids"].squeeze(),
+#             "attention_mask": encoding["attention_mask"].squeeze()
+#         }
 
 def load_cache():
     global homepage_cache
@@ -77,23 +77,23 @@ def load_model():
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     model = AutoModelForSequenceClassification.from_pretrained(model_path).to(device).eval()
 
-def classify_batch(texts: List[str]):
-    dataset = TextDataset(texts, tokenizer)
-    loader = DataLoader(dataset, batch_size=32, shuffle=False)
-    results = []
-    with torch.no_grad(), autocast_ctx:
-        for batch in loader:
-            input_ids = batch["input_ids"].to(model.device)
-            attention_mask = batch["attention_mask"].to(model.device)
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            probs = torch.softmax(outputs.logits, dim=-1)
-            scores, preds = torch.max(probs, dim=-1)
-            for i in range(len(scores)):
-                results.append((id2label[preds[i].item()], scores[i].item()))
-    return results
+# def classify_batch(texts: List[str]):
+#     dataset = TextDataset(texts, tokenizer)
+#     loader = DataLoader(dataset, batch_size=32, shuffle=False)
+#     results = []
+#     with torch.no_grad(), autocast_ctx:
+#         for batch in loader:
+#             input_ids = batch["input_ids"].to(model.device)
+#             attention_mask = batch["attention_mask"].to(model.device)
+#             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+#             probs = torch.softmax(outputs.logits, dim=-1)
+#             scores, preds = torch.max(probs, dim=-1)
+#             for i in range(len(scores)):
+#                 results.append((id2label[preds[i].item()], scores[i].item()))
+#     return results
 
-async def classify_text_async(text: str):
-    return classify_batch([text])[0]
+# async def classify_text_async(text: str):
+#     return classify_batch([text])[0]
 
 # --- SCRAPER ---
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -132,17 +132,17 @@ async def get_website_context_async(url: str, client: httpx.AsyncClient, max_ret
 # --- FASTAPI APP ---
 app = FastAPI()
 
-class InputEntry(BaseModel):
-    domain: str
-    backlink: str
-    title: str
-    description: str
+# class InputEntry(BaseModel):
+#     domain: str
+#     backlink: str
+#     title: str
+#     description: str
 
-class OutputEntry(BaseModel):
-    domain: str
-    backlink: str
-    label: str
-    score: float
+# class OutputEntry(BaseModel):
+#     domain: str
+#     backlink: str
+#     label: str
+#     score: float
 
 @app.on_event("startup")
 async def startup_event():

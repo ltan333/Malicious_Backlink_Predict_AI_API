@@ -28,7 +28,6 @@ logging.basicConfig(
 )
 
 # --- CACHE ---
-
 homepage_cache = {}
 cache_lock = AsyncLock()
 cache_updated = False
@@ -95,7 +94,7 @@ async def save_cache():
 
 def load_model():
     global model, tokenizer
-    model_path = "Models/phobert_base_v4"  # Sử dụng đúng đường dẫn model local
+    model_path = "Models/phobert_base_v4"
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         model = AutoModelForSequenceClassification.from_pretrained(model_path, local_files_only=True).to(device).eval()
@@ -151,7 +150,6 @@ async def get_website_context_async(url: str, client: httpx.AsyncClient, max_ret
                     break
 
             combined = f"{title}. {meta_desc}".strip()
-            print(combined)
             logging.info(f"Scraped context: {combined}")
             return combined if combined else "inaccessible"
 
@@ -164,7 +162,6 @@ async def get_website_context_async(url: str, client: httpx.AsyncClient, max_ret
         await asyncio.sleep(1.5 * (2 ** (attempt - 1)))
 
 # --- FASTAPI APP ---
-# Tương tự startup event - cái đó bị khai tử trong FastAPI mới
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.info(f"Running on device with: {device}")
@@ -251,7 +248,6 @@ async def login_for_access_token(secret_input: SecretKeyInput):
 async def get_token_info(current_user: str = Depends(verify_access_token)):
     return {"message": "Token is valid", "exp": datetime.fromtimestamp(current_user.get("exp")), "user": current_user.get("sub")}
 
-    
 # Endpoint để dự đoán
 @app.post("/predict", response_model=List[OutputEntry], dependencies=[Depends(verify_access_token)])
 async def predict(input_data: List[InputEntry]):
