@@ -35,14 +35,14 @@ Optimized for **Linux (Ubuntu)** with **GPU acceleration**.
    pip install torch==2.2.2+cu121 torchvision==0.17.2+cu121 --index-url https://download.pytorch.org/whl/cu121
    ```
 
-4. **Test CUDA availability**
-   ```bash
-   python3 test_cuda.py
-   ```
-
-5. **Install other dependencies**
+4. **Install other dependencies**
    ```bash
    pip install -r requirements.txt
+   ```
+
+5. **Test CUDA availability**
+   ```bash
+   python3 test_cuda.py
    ```
 
 6. **Expose API**
