@@ -20,7 +20,7 @@ Optimized for **Linux (Ubuntu)** with **GPU acceleration**.
 
 1. **Clone the repository or Download project**
    ```bash
-   git clone https://github.com/your-user/Malicious_Backlink_Predict_AI_API.git
+   git clone https://github.com/ltan333/Malicious_Backlink_Predict_AI_API.git
    cd Malicious_Backlink_Predict_AI_API
    ```
 
