@@ -151,7 +151,6 @@ async def get_website_context_async(url: str, client: httpx.AsyncClient, max_ret
                     break
 
             combined = f"{title}. {meta_desc}".strip()
-            logging.info(f"Scraped context: {combined}")
             return combined if combined else "inaccessible"
 
         except (httpx.TimeoutException, httpx.RequestError) as e:
