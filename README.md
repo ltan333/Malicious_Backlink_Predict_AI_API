@@ -7,7 +7,33 @@ Optimized for **Linux (Ubuntu)** with **GPU acceleration**.
 
 ---
 
-## 🚀 Getting Started
+## 📁 Project Structure
+
+### File name project: "Malicious_Backlink_Predict_AI_API"
+```
+.
+├── Homepage_Cache/
+│   └── homepage_cache.json     # Cache for homepage results
+├── Logs/
+│   └── api_server.log          # Cache for logs when expose API
+├── Models/
+│   └── phobert_base_v4         # Fine-tuned PhoBERT model weights (version 4)
+├── api_server.py               # Main script to launch the API server (FastAPI)
+├── const.py                    # Constants used throughout the project
+├── test_cuda.py                # Script to test CUDA availability and GPU setup
+├── requirements.txt            # Python dependency list
+├── Dockerfile                  # Instructions to build the Docker image
+├── docker-compose.yml          # Multi-service orchestration with Docker Compose
+├── README.md                   # Project overview, setup instructions, and usage guide
+├── .gitignore                  # Specifies files/folders to exclude from Git
+└── Models_Configs.txt          # Instructions for downloading pre-trained model weights and configs
+```
+
+---
+
+# You can run this project with 2 ways on Linux(Ubuntu) or Windows OS:
+
+# 🚀 Getting Started with Terminal
 
 ### 🔧 Requirements
 - **Python** `3.10.12`
@@ -50,43 +76,153 @@ Optimized for **Linux (Ubuntu)** with **GPU acceleration**.
    python3 API_Server.py
    ```
 
-## 🐳 Run with Docker Compose
+# 🐳 Getting Started with Docker Compose
 
+This section guides you through:
 
-### 🧱 Build and Run
+✅ Installing Docker & Docker Compose  
+✅ Building & Running your app  
+✅ Stopping the service  
+
+---
+
+## 🐧 For **Ubuntu (Linux)**
+
+### ✅ Step 1: Install Docker Engine
+
 ```bash
+sudo apt update
+sudo apt install -y ca-certificates curl gnupg lsb-release
+```
+
+Add Docker’s official GPG key:
+
+```bash
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+```
+
+Set up the Docker repository:
+
+```bash
+echo   "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg]   https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"   | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+```
+
+Install Docker Engine:
+
+```bash
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+Verify Docker installed correctly:
+
+```bash
+docker --version
+```
+
+> You should see something like: `Docker version 24.x.x, build xxxxx`
+
+---
+
+### ✅ Step 2: Install Docker Compose (CLI wrapper, optional)
+
+Docker Compose v2 is now included in Docker as `docker compose` (with a **space**).
+
+If you still want the legacy `docker-compose` (with a hyphen):
+
+```bash
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+docker-compose --version
+```
+
+---
+
+### ✅ Step 3: Run Your App
+
+Make sure your project has:
+
+* `Dockerfile`
+* `docker-compose.yml`
+
+In your project root directory:
+
+```bash
+cd Malicious_Backlink_Predict_AI_API
 docker-compose up --build
+```
+
+Or
+```bash
+cd Malicious_Backlink_Predict_AI_API
+docker-compose up -d --build # Runs the containers in the background (detached mode)
 ```
 
 The API will be available at:  
 📍 `http://localhost:8000/predict`
 
-### 🛑 Stop the service
+---
+
+### 🛑 To Stop the Service
+
 ```bash
 docker-compose down
 ```
 
 ---
 
-## 📁 Project Structure
+## 🪟 For **Windows**
 
-```
-.
-├── API_Server.py               # Main API server script
-├── app.py                      # Entry point (optional)
-├── const.py                    # Constants used in the project
-├── Models/                     # Pre-trained model files
-├── Homepage_Cache/
-│   └── homepage_cache.json     # Cache for homepage results
-├── test_cuda.py                # Script to test CUDA support
-├── requirements.txt            # Python dependencies
-├── Dockerfile                  # Docker image setup
-├── docker-compose.yml          # Docker services orchestration
-├── README.md                   # Project documentation
-└── Models_Configs.txt          # Instruction to download models
+### ✅ Step 1: Install Docker Desktop
+
+1. Download from:  
+   👉 [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
+
+2. Run the installer → Follow setup
+
+3. Enable:
+
+   * WSL 2 backend (recommended for performance)
+   * Linux containers (default)
+
+4. Open Docker Desktop and wait for it to start.
+
+5. Open **Command Prompt**, **PowerShell**, or **WSL** terminal and verify:
+
+```bash
+docker --version
+docker-compose --version
 ```
 
 ---
+
+### ✅ Step 2: Build and Run the App
+
+Navigate to your project folder using terminal:
+
+```bash
+cd Malicious_Backlink_Predict_AI_API
+docker-compose up --build
+```
+
+Or
+```bash
+cd Malicious_Backlink_Predict_AI_API
+docker-compose up -d --build # Runs the containers in the background (detached mode)
+```
+
+The API will be available at:  
+📍 `http://localhost:8000/predict`
+
+---
+
+### 🛑 To Stop the Service
+
+```bash
+docker-compose down
+```
+
 
 ## 📦 Notes
 

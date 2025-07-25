@@ -2,17 +2,25 @@ version: '3.8'
 
 services:
   api:
+    # Build the Docker image using the Dockerfile in the current directory
     build:
       context: .
       dockerfile: Dockerfile
-    image: api_malicious_link_v1_image
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./Homepage_Cache:/app/Homepage_Cache
-    container_name: api_malicious_link_v1_container
 
-    # Run on GPU
+    # Assign a name to the built Docker image
+    image: malicious_backlink_predict_ai_api_image_v1
+
+    # Set a name for the running container
+    container_name: malicious_backlink_predict_ai_api_container_v1
+
+    # Mount local folders/files into the container
+    volumes:
+      # Mount the Homepage_Cache directory
+      - ./Homepage_Cache:/app/Homepage_Cache
+      # Mount the log file
+      - ./Logs:/app/Logs
+
+    # Enable GPU access
     deploy:
       resources:
         reservations:
@@ -20,3 +28,11 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+    # Specify the runtime for NVIDIA GPU support
+    runtime: nvidia
+
+    # Set environment variables for NVIDIA GPU usage
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility

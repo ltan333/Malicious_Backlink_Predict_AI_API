@@ -1,4 +1,4 @@
-# app.py
+# --- Import all libraries and frameworks ---
 import const as config
 import json
 import os
@@ -24,7 +24,7 @@ from pydantic import BaseModel
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(message)s',
-    handlers=[logging.FileHandler("api_server.log"), logging.StreamHandler()]
+    handlers=[logging.FileHandler("Logs/api_server.log"), logging.StreamHandler()]
 )
 
 # --- CACHE ---
@@ -36,6 +36,7 @@ cache_updated = False
 model = None
 tokenizer = None
 
+# --- Define device ---
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 autocast_ctx = torch.amp.autocast(device_type="cuda") if torch.cuda.is_available() else nullcontext()
 
@@ -179,16 +180,18 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-# Input khi lấy token
+# Input token
 class SecretKeyInput(BaseModel):
     api_key: str
 
+# Input model
 class InputEntry(BaseModel):
     domain: str
     backlink: str
     title: str
     description: str
 
+# Output model
 class OutputEntry(BaseModel):
     domain: str
     backlink: str
@@ -229,7 +232,7 @@ async def verify_access_token(credentials: HTTPAuthorizationCredentials = Depend
 async def root():
     return {"message": "Welcome to the THD AI Model API!", "version": config.SERVER_VERSION}
 
-# Endpoint để lấy access token
+# Endpoint to get access token
 @app.post("/get-access-token", response_model=Token)
 async def login_for_access_token(secret_input: SecretKeyInput):
     if secret_input.api_key != config.API_SECRET_KEY:
@@ -243,19 +246,20 @@ async def login_for_access_token(secret_input: SecretKeyInput):
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-# Endpoint để lấy thông tin token
+# Endpoint to get token
 @app.get("/get-token-info")
 async def get_token_info(current_user: str = Depends(verify_access_token)):
     return {"message": "Token is valid", "exp": datetime.fromtimestamp(current_user.get("exp")), "user": current_user.get("sub")}
 
-# Endpoint để dự đoán
+# Endpoint to predict
 @app.post("/predict", response_model=List[OutputEntry], dependencies=[Depends(verify_access_token)])
 async def predict(input_data: List[InputEntry]):
-    # Kiểm tra model/tokenizer đã load thành công chưa, có trường hợp model load lỗi nhưng endpoint vẫn lên
+    # Load Models checking
     if model is None or tokenizer is None:
         logging.error("Model or tokenizer not loaded. Cannot process prediction.")
         raise HTTPException(status_code=503, detail="Model not loaded. Please try again later.")
-    # Giới hạn số lượng input tránh quá tải RAM/GPU - Chỉ nhận các gói tin nhỏ hơn MAX_BATCH_SIZE
+    
+    # Limit input to avoid overload RAM/GPU - with max batchsize MAX_BATCH_SIZE
     MAX_BATCH_SIZE = config.MAX_BATCH_SIZE
     if len(input_data) > MAX_BATCH_SIZE:
         logging.warning(f"Input batch size {len(input_data)} exceeds {MAX_BATCH_SIZE}")
@@ -314,7 +318,8 @@ async def predict(input_data: List[InputEntry]):
                     results.append(OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=desc_score))
                 else:
                     results.append(OutputEntry(domain=domain, backlink=backlink, label="Quảng cáo bán hàng", score=desc_score))
-            # --- Xử lý lỗi --- Trong trường hợp có lỗi trong quá trình xử lý từng entry
+
+            # --- Exception for each entry ---
             except Exception as e:
                 logging.error(f"Error processing entry {getattr(entry, 'domain', None)}: {e}")
                 results.append(OutputEntry(
@@ -325,11 +330,7 @@ async def predict(input_data: List[InputEntry]):
                 ))
     return results
 
-# Expose API: uvicorn app:app --host 0.0.0.0 --port 8000
-# http://localhost:8000/docs#/default/predict_predict_post
-
 # --- RUN SERVER ---
-# API_Server:app - phải trùng với tên file
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("API_Server:app", host=config.SERVER_HOST, port=config.SERVER_PORT, reload=True)
+    uvicorn.run("api_server:app", host=config.SERVER_HOST, port=config.SERVER_PORT, reload=True)

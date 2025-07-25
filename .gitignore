@@ -208,5 +208,12 @@ __marimo__/
 
 # File tham số
 const.py
+
 # Model AI
 Models/
+
+# Log files
+Logs/
+
+# Homepage_Cache files
+Homepage_Cache/
