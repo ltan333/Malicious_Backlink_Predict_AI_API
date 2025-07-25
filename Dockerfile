@@ -9,7 +9,6 @@ COPY requirements.txt .
 
 # Install dependencies
 RUN pip install --upgrade pip \
- && pip install torchvision==0.17.2+cu121 \
  && pip install --no-cache-dir -r requirements.txt
 
 # Copy project files

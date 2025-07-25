@@ -20,6 +20,10 @@ services:
       # Mount the log file
       - ./Logs:/app/Logs
 
+    # Ports
+    ports:
+      - "8000:8000"
+
     # Enable GPU access
     deploy:
       resources:
