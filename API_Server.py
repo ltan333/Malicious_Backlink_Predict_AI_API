@@ -7,6 +7,10 @@ import asyncio
 import httpx
 import urllib3
 import torch
+from urllib.parse import urlparse
+from pathlib import Path
+from playwright.async_api import async_playwright
+import fitz
 from asyncio import Lock as AsyncLock
 from typing import List
 from contextlib import nullcontext
@@ -41,9 +45,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 autocast_ctx = torch.amp.autocast(device_type="cuda") if torch.cuda.is_available() else nullcontext()
 
 label2id = {
-    "government": 0, "education": 1, "technology": 2, "tourism": 3,
-    "ecommerce": 4, "delivery": 5, "health": 6, "finance": 7,
-    "media": 8, "nonprofit": 9, "gambling": 10, "movies": 11
+    "gambling": 0, "movies": 1, "ecommerce": 2, "government": 3, "education": 4, "technology": 5,
+    "tourism": 6, "health": 7, "finance": 8, "media": 9, "nonprofit": 10, "realestate": 11,
+    "services": 12, "industries": 13, "agriculture": 14
 }
 id2label = {v: k for k, v in label2id.items()}
 
@@ -95,7 +99,8 @@ async def save_cache():
 
 def load_model():
     global model, tokenizer
-    model_path = "Models/phobert_base_v4"
+    # Update new Model version 6
+    model_path = "Models/phobert_base_v6"
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         model = AutoModelForSequenceClassification.from_pretrained(model_path, local_files_only=True).to(device).eval()
@@ -106,7 +111,7 @@ def load_model():
 
 def classify_batch(texts: List[str]):
     dataset = TextDataset(texts, tokenizer)
-    loader = DataLoader(dataset, batch_size=32, shuffle=False)
+    loader = DataLoader(dataset, batch_size=64, shuffle=False)
     results = []
     with torch.no_grad(), autocast_ctx:
         for batch in loader:
@@ -123,43 +128,142 @@ async def classify_text_async(text: str):
     return classify_batch([text])[0]
 
 # --- SCRAPER ---
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+def is_accessible(url, timeout=5):
+    try:
+        response = httpx.head(url, timeout=timeout, follow_redirects=True, verify=False)
+        return response.status_code < 400
+    except:
+        return False
 
-async def get_website_context_async(url: str, client: httpx.AsyncClient, max_retries=2):
+def extract_pdf_text(pdf_bytes):
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        return "\n".join(page.get_text() for page in doc).strip()
+    except:
+        return ""
+
+def fetch_pdf_httpx(url, timeout=10):
     headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/114.0.0.0 Safari/537.36"
-        )
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/pdf",
+        "Referer": url,
     }
-    # Scan 10s timeout
-    timeout = httpx.Timeout(10.0, connect=5.0)
-    for attempt in range(1, max_retries + 1):
-        try:
-            response = await client.get(url, headers=headers, timeout=timeout)
-            if response.status_code != 200:
-                raise httpx.HTTPStatusError(f"Status {response.status_code}", request=response.request, response=response)
+    try:
+        with httpx.Client(follow_redirects=True, timeout=timeout, headers=headers, verify=False) as client:
+            r = client.get(url)
+            if r.status_code == 200 and r.content.startswith(b"%PDF"):
+                return r.content
+    except:
+        pass
+    return None
 
-            raw_html = response.text
-            soup = BeautifulSoup(raw_html, "html.parser")
-            title = soup.find("title").text.strip() if soup.find("title") else ""
-            meta_desc = ""
-            for meta in soup.find_all("meta"):
-                if "description" in meta.get("name", "").lower():
-                    meta_desc = meta.get("content", "").strip()
-                    break
+async def fetch_pdf_playwright(url, timeout=20):
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                context = await browser.new_context(ignore_https_errors=True)
+                page = await context.new_page()
+                response = await page.goto(url, timeout=timeout * 1000)
+                if response and response.ok:
+                    data = await response.body()
+                    if data.startswith(b"%PDF"):
+                        return data
+            finally:
+                await browser.close()
+    except:
+        pass
+    return None
 
-            combined = f"{title}. {meta_desc}".strip()
-            return combined if combined else "inaccessible"
+async def handle_pdf(url):
+    pdf_data = fetch_pdf_httpx(url) or await fetch_pdf_playwright(url)
+    if pdf_data:
+        text = extract_pdf_text(pdf_data)
+        return text if text else "inaccessible"
+    return "inaccessible"
 
-        except (httpx.TimeoutException, httpx.RequestError) as e:
-            logging.warning(f"Timeout or network error scraping {url} (attempt {attempt}): {e}")
-        except Exception as e:
-            logging.error(f"Error scraping {url} (attempt {attempt}): {e}")
-        if attempt == max_retries:
-            return "inaccessible"
-        await asyncio.sleep(1.5 * (2 ** (attempt - 1)))
+def fetch_static_html(url, timeout=10):
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        with httpx.Client(follow_redirects=True, verify=False, timeout=timeout, headers=headers) as client:
+            r = client.get(url)
+            return r.text
+    except:
+        return ""
+
+async def fetch_dynamic_html(url, timeout=10):
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                context = await browser.new_context(ignore_https_errors=True)
+                page = await context.new_page()
+                await page.goto(url, timeout=timeout * 1000)
+                await page.wait_for_timeout(4000)
+                html = await page.content()
+                return html
+            finally:
+                await browser.close()
+    except:
+        return ""
+
+async def handle_html(url):
+    static_html = fetch_static_html(url)
+    if not static_html:
+        return "inaccessible"
+
+    soup = BeautifulSoup(static_html, "html.parser")
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+    for tag in soup.select('[style*="display:none"], [style*="display: none"]'):
+        tag.decompose()
+
+    text = soup.get_text("\n", strip=True)
+
+    has_fw = any(f in static_html.lower() for f in ["vue", "react", "angular", "webpack", "require.js"])
+    has_ns = "enable javascript" in static_html.lower()
+
+    if has_fw or has_ns:
+        dynamic_html = await fetch_dynamic_html(url)
+        if not dynamic_html:
+            return text or "inaccessible"
+        soup = BeautifulSoup(dynamic_html, "html.parser")
+        for tag in soup(["script", "style", "noscript"]):
+            tag.decompose()
+        for tag in soup.select('[style*="display:none"], [style*="display: none"]'):
+            tag.decompose()
+        text = soup.get_text("\n", strip=True)
+
+    return text or "inaccessible"
+
+async def get_website_context_async(url):
+    if not is_accessible(url):
+        return "inaccessible"
+    ext = Path(urlparse(url).path).suffix.lower()
+    if not ext:
+        ext = ".html"
+    if ext == ".pdf":
+        return await handle_pdf(url)
+    else:
+        return await handle_html(url)
+    
+def overlap_check(text1, text2):
+    words1 = set(text1.lower().split())
+    words2 = set(text2.lower().split())
+    overlap = words1.intersection(words2)
+    ratio = len(overlap) / len(words2) if words2 else 0
+    return (ratio > 0.85)
+
+async def check_subpage_context(domain, backlink, text, final_label, score):
+    subpage_context = await get_website_context_async(backlink)
+    if subpage_context == "inaccessible":
+        return OutputEntry(domain=domain, backlink=backlink, label=final_label, score=score)
+    
+    if overlap_check(subpage_context, text):
+        return OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=score)
+    
+    return OutputEntry(domain=domain, backlink=backlink, label=final_label, score=score)
+
 
 # --- FASTAPI APP ---
 @asynccontextmanager
@@ -268,55 +372,55 @@ async def predict(input_data: List[InputEntry]):
         for entry in input_data:
             try:
                 domain, backlink = entry.domain, entry.backlink
-                desc_text, title_text = entry.description, entry.title
+                description, title = entry.description, entry.title
+                content = f"{title}, {description}".strip()
 
-                # Classify description
-                desc_label, desc_score = await classify_text_async(desc_text)
-                if desc_label in ["gambling", "movies"]:
-                    label_map = {"gambling": "Cờ bạc", "movies": "Phim lậu"}
-                    results.append(OutputEntry(domain=domain, backlink=backlink, label=label_map[desc_label], score=desc_score))
+                # Classify first 15 characters of title
+                title_label, title_score = await classify_text_async(title[:15])
+                if title_label == "gambling":
+                    results.append(OutputEntry(domain=domain, backlink=backlink, label="Cờ bạc", score=title_score))
                     continue
+                if title_label == "movies":
+                    result = await check_subpage_context(domain, backlink, title[:15], "Phim lậu", title_score)
+                    if result:
+                        results.append(result)
+                        continue
 
-                # Classify title
-                title_label, title_score = await classify_text_async(title_text)
-                if title_label in ["gambling", "movies"]:
-                    label_map = {"gambling": "Cờ bạc", "movies": "Phim lậu"}
-                    results.append(OutputEntry(domain=domain, backlink=backlink, label=label_map[title_label], score=title_score))
+                # Classify content
+                content_label, content_score = await classify_text_async(content)
+                if content_label == "gambling":
+                    results.append(OutputEntry(domain=domain, backlink=backlink, label="Cờ bạc", score=content_score))
                     continue
-
-                # Safe categories
-                safe_categories = ["government", "education", "technology", "health", "finance", "media", "nonprofit"]
-                if desc_label in safe_categories:
-                    results.append(OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=desc_score))
+                if content_label == "movies":
+                    result = await check_subpage_context(domain, backlink, content, "Phim lậu", content_score)
+                    if result:
+                        results.append(result)
+                        continue
+                
+                # Mark safe if not ecommerce
+                if content_label != "ecommerce":
+                    results.append(OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=content_score))
                     continue
 
                 homepage_url = f"https://{domain}/"
                 if domain in homepage_cache:
                     homepage_label = homepage_cache[domain]
-                    homepage_score = 1.0
                 else:
-                    homepage_context = await get_website_context_async(homepage_url, client)
+                    homepage_context = await get_website_context_async(homepage_url)
                     if homepage_context == "inaccessible":
-                        results.append(OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=desc_score))
+                        results.append(OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=content_score))
                         continue
                     homepage_label, homepage_score = await classify_text_async(homepage_context)
                     homepage_cache[domain] = homepage_label
                     await save_cache()
 
-                if homepage_label in [desc_label, "media", "An toàn"]:
-                    results.append(OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=desc_score))
+                if homepage_label not in ["education", "government"]:
+                    results.append(OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=content_score))
                     continue
-
-                subpage_context = await get_website_context_async(backlink, client)
-                if subpage_context == "inaccessible":
-                    results.append(OutputEntry(domain=domain, backlink=backlink, label="Quảng cáo bán hàng", score=desc_score))
+                result = await check_subpage_context(domain, backlink, content, "Quảng cáo bán hàng", content_score)
+                if result:
+                    results.append(result)
                     continue
-
-                subpage_label, subpage_score = await classify_text_async(subpage_context)
-                if subpage_label in [desc_label, "media"]:
-                    results.append(OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=desc_score))
-                else:
-                    results.append(OutputEntry(domain=domain, backlink=backlink, label="Quảng cáo bán hàng", score=desc_score))
 
             # --- Exception for each entry ---
             except Exception as e:
@@ -332,4 +436,4 @@ async def predict(input_data: List[InputEntry]):
 # --- RUN SERVER ---
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("api_server:app", host=config.SERVER_HOST, port=config.SERVER_PORT, reload=True)
+    uvicorn.run("api_server:app", host=config.SERVER_HOST, port=config.SERVER_PORT)

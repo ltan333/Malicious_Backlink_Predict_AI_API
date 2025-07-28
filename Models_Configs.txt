@@ -1,4 +1,4 @@
-Download Models:
+Download Models: You need download "phobert_base_v6" in below file Drive
 https://drive.google.com/drive/folders/1aQ0ewBdmXT-lH40kwmIc9qzduE-PM9SK?usp=sharing
 
 Download Configs:
