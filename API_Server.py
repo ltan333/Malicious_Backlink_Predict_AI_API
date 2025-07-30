@@ -131,7 +131,7 @@ async def classify_batch(texts: List[str]):
     Returns a list of (predicted_label, confidence_score) tuples.
     """
     dataset = TextDataset(texts, tokenizer)
-    loader = DataLoader(dataset, batch_size=32, shuffle=False, pin_memory=torch.cuda.is_available())
+    loader = DataLoader(dataset, batch_size=128, shuffle=False, pin_memory=torch.cuda.is_available())
     results = []
     with torch.inference_mode(), autocast_ctx:
         for batch in loader:
@@ -458,8 +458,8 @@ async def predict(input_data: List[InputEntry]):
     if len(input_data) > MAX_BATCH_SIZE:
         raise HTTPException(status_code=413, detail=f"Batch size exceeds (max={MAX_BATCH_SIZE})")
 
-    titles = [entry.title[:20] for entry in input_data]
-    contents = [f"{entry.title}, {entry.description}".strip() for entry in input_data]
+    titles = [entry.title.lower() for entry in input_data]
+    contents = [f"{entry.title} {entry.description}".strip().lower() for entry in input_data]
 
     # Parallel batch classification
     title_task = asyncio.create_task(classify_batch(titles))
