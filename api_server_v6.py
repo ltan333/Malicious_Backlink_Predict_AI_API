@@ -583,4 +583,4 @@ if __name__ == "__main__":
     Run the FastAPI server using Uvicorn.
     """
     import uvicorn
-    uvicorn.run("api_server:app", host=config.SERVER_HOST, port=config.SERVER_PORT)
+    uvicorn.run("api_server_v6:app", host=config.SERVER_HOST, port=config.SERVER_PORT)
