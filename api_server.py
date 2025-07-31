@@ -2,6 +2,7 @@
 import const as config
 import json
 import os
+import re
 import logging
 import asyncio
 import httpx
@@ -22,6 +23,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+import tldextract
 
 # --- LOGGING ---
 logging.basicConfig(
@@ -34,6 +36,7 @@ logging.basicConfig(
 homepage_cache = {}
 cache_lock = AsyncLock()
 cache_updated = False
+domain_dict = {}
 
 # --- MODEL ---
 model = None
@@ -115,8 +118,7 @@ def load_model():
     This is called once during app startup.
     """
     global model, tokenizer
-    # Update new Model version 6
-    model_path = "Models/phobert_base_v6"
+    model_path = "Models/phobert_base_v7"
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         model = AutoModelForSequenceClassification.from_pretrained(model_path, local_files_only=True).to(device).eval()
@@ -143,6 +145,39 @@ async def classify_batch(texts: List[str]):
             for i in range(len(scores)):
                 results.append((id2label[preds[i].item()], scores[i].item()))
     return results
+
+def clean_text(text):   
+    text = text.lower()
+
+    # Preserve domain dots, decimal dots, and URL hyphens
+    text = re.sub(r'(\w)\.(?=\w)', r'\1<DOMAIN>', text)
+    text = re.sub(r'(\d)\.(?=\d)', r'\1<DECIMAL>', text)
+    text = re.sub(r'(\w)-(?=\w)', r'\1<HYPHEN>', text)
+
+    # Remove remaining dots and hyphens
+    text = text.replace('.', '')
+    text = text.replace('-', '')
+
+    # Replace one or more underscores with a single space
+    text = re.sub(r'_+', ' ', text)
+
+    # Restore preserved characters
+    text = text.replace('<DOMAIN>', '.')
+    text = text.replace('<DECIMAL>', '.')
+    text = text.replace('<HYPHEN>', '-')
+
+    # Handle commas
+    text = re.sub(r'(?<=[a-z0-9]),(?=[a-z])', ' ', text)
+    text = re.sub(r'(?<=[a-z]),(?=[0-9])', ' ', text)
+    text = re.sub(r',(?=\D)|(?<=\D),', '', text)
+
+    # Remove unwanted punctuation (keep quotes, %, /)
+    text = re.sub(r'[^\w\s\.,/%"]', '', text)
+
+    # Normalize spaces
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    return text
 
 # --- SCRAPER ---
 def is_accessible(url, timeout=5):
@@ -197,11 +232,13 @@ async def fetch_pdf_playwright(url, timeout=20):
             try:
                 context = await browser.new_context(ignore_https_errors=True)
                 page = await context.new_page()
-                response = await page.goto(url, timeout=timeout * 1000)
-                if response and response.ok:
-                    data = await response.body()
-                    if data.startswith(b"%PDF"):
-                        return data
+                await page.goto(url, timeout=timeout * 1000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=5000)
+                except:
+                    await page.wait_for_timeout(4000)
+                html = await page.content()
+                return html
             finally:
                 await browser.close()
     except:
@@ -240,15 +277,12 @@ async def fetch_dynamic_html(url, timeout=10):
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            try:
-                context = await browser.new_context(ignore_https_errors=True)
-                page = await context.new_page()
-                await page.goto(url, timeout=timeout * 1000)
-                await page.wait_for_timeout(4000)
-                html = await page.content()
-                return html
-            finally:
-                await browser.close()
+            page = await (await browser.new_context(ignore_https_errors=True)).new_page()
+            await page.goto(url, timeout=timeout * 1000)
+            await page.wait_for_timeout(4000)
+            html = await page.content()
+            await browser.close()
+            return html
     except:
         return ""
 
@@ -293,13 +327,17 @@ async def get_website_context_async(url):
     """
     if not is_accessible(url):
         return "inaccessible"
+
     ext = Path(urlparse(url).path).suffix.lower()
     if not ext:
         ext = ".html"
+
     if ext == ".pdf":
-        return await handle_pdf(url)
+        result = await handle_pdf(url)
     else:
-        return await handle_html(url)
+        result = await handle_html(url)
+
+    return result
     
 def overlap_check(text1, text2):
     """
@@ -309,15 +347,17 @@ def overlap_check(text1, text2):
     words1 = set(text1.lower().split())
     words2 = set(text2.lower().split())
     overlap = words1.intersection(words2)
-    ratio = len(overlap) / len(words1.union(words2))
-    return (ratio > 0.85)
+    ratio = len(overlap) / len(words2) if words2 else 0
+    print(ratio, words2)
+    print(words1)
+    return (ratio > 0.98)
 
 async def check_subpage_context(domain, backlink, text, final_label, score):
     """
     Fetch the backlink page and compare its content with the predicted text.
     If content is similar, mark as 'safe', else keep original label.
     """
-    subpage_context = await get_website_context_async(backlink)
+    subpage_context = clean_text(await get_website_context_async(backlink))
     if subpage_context == "inaccessible":
         return OutputEntry(domain=domain, backlink=backlink, label=final_label, score=score)
     
@@ -325,6 +365,14 @@ async def check_subpage_context(domain, backlink, text, final_label, score):
         return OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=score)
     
     return OutputEntry(domain=domain, backlink=backlink, label=final_label, score=score)
+
+async def process_domain(domain):
+    if domain in domain_dict:
+        return domain_dict[domain]
+    ext = tldextract.extract(domain)
+    normalized = f"{ext.domain}.{ext.suffix}"
+    domain_dict[domain] = normalized
+    return normalized
 
 # --- FASTAPI APP ---
 @asynccontextmanager
@@ -458,8 +506,9 @@ async def predict(input_data: List[InputEntry]):
     if len(input_data) > MAX_BATCH_SIZE:
         raise HTTPException(status_code=413, detail=f"Batch size exceeds (max={MAX_BATCH_SIZE})")
 
-    titles = [entry.title for entry in input_data]
-    contents = [f"{entry.title} {entry.description}".strip() for entry in input_data]
+    titles = [clean_text(entry.title) for entry in input_data]
+    descriptions = [clean_text(entry.description) for entry in input_data]
+    contents = [f"{title} {description}".strip() for title, description in zip(titles, descriptions)]
 
     # Parallel batch classification
     title_task = asyncio.create_task(classify_batch(titles))
@@ -475,15 +524,17 @@ async def predict(input_data: List[InputEntry]):
     save_cache_required = False
 
     async with httpx.AsyncClient(verify=False, timeout=20.0) as client:
-        for i, entry in enumerate(input_data):
+        normalized_domains = await asyncio.gather(*(process_domain(entry.domain) for entry in input_data))
+        for i, (entry, domain) in enumerate(zip(input_data, normalized_domains)):
             try:
-                domain, backlink = entry.domain, entry.backlink
+                backlink = entry.backlink
                 title_label, title_score = title_results[i]
                 content_label, content_score = content_results[i]
 
                 # Classify first 15 characters of title
                 if title_label == "gambling":
-                    results.append(OutputEntry(domain=domain, backlink=backlink, label="Cờ bạc", score=title_score))
+                    subpage_promises.append(check_subpage_context(domain, backlink, titles[i], "Cờ bạc", title_score))
+                    subpage_mapping.append((i, domain, backlink))
                     continue
                 if title_label == "movies":
                     subpage_promises.append(check_subpage_context(domain, backlink, titles[i], "Phim lậu", title_score))
@@ -492,7 +543,8 @@ async def predict(input_data: List[InputEntry]):
 
                 # Classify content
                 if content_label == "gambling":
-                    results.append(OutputEntry(domain=domain, backlink=backlink, label="Cờ bạc", score=content_score))
+                    subpage_promises.append(check_subpage_context(domain, backlink, contents[i], "Cờ bạc", content_score))
+                    subpage_mapping.append((i, domain, backlink))
                     continue
                 if content_label == "movies":
                     subpage_promises.append(check_subpage_context(domain, backlink, contents[i], "Phim lậu", content_score))
@@ -509,7 +561,7 @@ async def predict(input_data: List[InputEntry]):
                     homepage_label = homepage_cache[domain]
                 else:
                     homepage_domains_needed.add(domain)
-                    pending_homepage_entries.append((i, entry, content_score))
+                    pending_homepage_entries.append((i, domain, entry.backlink, content_score))
                     continue  # delay decision until homepage content is available
 
                 # Decision using cached homepage label
@@ -538,8 +590,7 @@ async def predict(input_data: List[InputEntry]):
     homepage_context_map = dict(zip(homepage_tasks.keys(), homepage_results))
 
     # Classify homepage and resolve deferred decisions
-    for i, entry, content_score in pending_homepage_entries:
-        domain, backlink = entry.domain, entry.backlink
+    for i, domain, backlink, content_score in pending_homepage_entries:
         homepage_context = homepage_context_map.get(domain)
 
         if isinstance(homepage_context, Exception) or homepage_context == "inaccessible":
