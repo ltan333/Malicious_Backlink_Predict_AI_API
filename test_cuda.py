@@ -1,3 +1,3 @@
 import torch
-print(torch.version.cuda)   # → None nếu là bản CPU-only
-print(torch.cuda.is_available())  # → False nếu không có CUDA support
+print(torch.version.cuda)   # → None if CPU-only
+print(torch.cuda.is_available())  # → False if do not have CUDA support
