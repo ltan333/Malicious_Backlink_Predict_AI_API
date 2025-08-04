@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.env
+.git/
+.gitignore
+
+Models_Configs.txt
+test_cuda.py
+README.md
+
+Homepage_Cache/
+Logs/
