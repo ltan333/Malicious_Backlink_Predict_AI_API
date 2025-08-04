@@ -29,7 +29,7 @@ import tldextract
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(message)s',
-    handlers=[logging.FileHandler("Logs/api_server.log"), logging.StreamHandler()]
+    handlers=[logging.FileHandler("logs/api_server.log"), logging.StreamHandler()]
 )
 
 # --- CACHE ---
@@ -122,7 +122,7 @@ def load_model():
     This is called once during app startup.
     """
     global model, tokenizer
-    model_path = r"Models\phobert_base_v7"
+    model_path = r"models\phobert_base_v7"
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         model = AutoModelForSequenceClassification.from_pretrained(model_path, local_files_only=True).to(device).eval()
