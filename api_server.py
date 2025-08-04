@@ -54,6 +54,7 @@ label2id = {
 }
 id2label = {v: k for k, v in label2id.items()}
 
+# --- CUSTOM DATASET ---
 class TextDataset(Dataset):
     """
     A custom Dataset class for tokenizing text input to feed into a transformer model.
@@ -80,9 +81,10 @@ class TextDataset(Dataset):
             "attention_mask": encoding["attention_mask"].squeeze()
         }
 
+# --- HOMECACHE ---
 def load_cache():
     """
-    Load cached homepage labels ('government', 'education') from a JSON file.
+    Load cached homepage labels from a JSON file.
     This helps avoid redundant website fetch/classification.
     """
     global homepage_cache
@@ -98,6 +100,7 @@ def load_cache():
     else:
         homepage_cache = {}
 
+# --- SAVE HOMECACHE ---
 async def save_cache():
     """
     Save the current homepage label cache into a JSON file.
@@ -112,13 +115,14 @@ async def save_cache():
         logging.error(f"Failed to save cache: {e}")
         print("[ERROR] Failed to save cache. Check logs for details.")
 
+# --- LOAD MODEL ---
 def load_model():
     """
     Load the pre-trained classification model and tokenizer from local directory.
     This is called once during app startup.
     """
     global model, tokenizer
-    model_path = "Models/phobert_base_v7"
+    model_path = r"Models\phobert_base_v7"
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         model = AutoModelForSequenceClassification.from_pretrained(model_path, local_files_only=True).to(device).eval()
@@ -127,6 +131,7 @@ def load_model():
         logging.error(f"Failed to load model: {e}")
         print("[ERROR] Failed to load model. Check logs for details.")
 
+# --- CLASSIFY BATCH ---
 async def classify_batch(texts: List[str]):
     """
     Perform batch classification of text inputs using the loaded model.
@@ -146,6 +151,7 @@ async def classify_batch(texts: List[str]):
                 results.append((id2label[preds[i].item()], scores[i].item()))
     return results
 
+# --- CLEAN TEXT ---
 def clean_text(text):   
     text = text.lower()
 
@@ -180,6 +186,7 @@ def clean_text(text):
     return text
 
 # --- SCRAPER ---
+# --- CHECK URL ---
 def is_accessible(url, timeout=5):
     """
     Check if a given URL is accessible (status code < 400).
@@ -191,6 +198,7 @@ def is_accessible(url, timeout=5):
     except:
         return False
 
+# --- EXTRACT PDF TEXT ---
 def extract_pdf_text(pdf_bytes):
     """
     Extract plain text from a PDF file given its byte content.
@@ -201,7 +209,8 @@ def extract_pdf_text(pdf_bytes):
         return "\n".join(page.get_text() for page in doc).strip()
     except:
         return ""
-
+    
+# --- FETCH PDF HTTPX---
 def fetch_pdf_httpx(url, timeout=10):
     """
     Attempt to fetch a PDF file from a URL using httpx.
@@ -221,6 +230,7 @@ def fetch_pdf_httpx(url, timeout=10):
         pass
     return None
 
+# --- FETCH PDF PLAYWRIGHT ---
 async def fetch_pdf_playwright(url, timeout=20):
     """
     Use Playwright to render the webpage and fetch PDF content if available.
@@ -245,6 +255,7 @@ async def fetch_pdf_playwright(url, timeout=20):
         pass
     return None
 
+# --- HANDLE PDF ---
 async def handle_pdf(url):
     """
     Try to fetch PDF content from a URL using httpx or Playwright.
@@ -256,6 +267,7 @@ async def handle_pdf(url):
         return text if text else "inaccessible"
     return "inaccessible"
 
+# --- FETCH STATIC HTML ---
 def fetch_static_html(url, timeout=10):
     """
     Fetch static HTML content of a webpage using httpx.
@@ -268,24 +280,29 @@ def fetch_static_html(url, timeout=10):
             return r.text
     except:
         return ""
+    
+playwright_semaphore = asyncio.Semaphore(2)
 
+# --- FETCH DYNAMIC HTML ---
 async def fetch_dynamic_html(url, timeout=10):
     """
     Fetch HTML content rendered dynamically (SPA) using Playwright.
     Waits for content to load before returning.
     """
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await (await browser.new_context(ignore_https_errors=True)).new_page()
-            await page.goto(url, timeout=timeout * 1000)
-            await page.wait_for_timeout(4000)
-            html = await page.content()
-            await browser.close()
-            return html
+        async with playwright_semaphore:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                page = await (await browser.new_context(ignore_https_errors=True)).new_page()
+                await page.goto(url, timeout=timeout * 1000)
+                await page.wait_for_timeout(4000)
+                html = await page.content()
+                await browser.close()
+                return html
     except:
         return ""
 
+# --- HANDLE HTML ---
 async def handle_html(url):
     """
     Extract clean text from HTML content.
@@ -320,6 +337,7 @@ async def handle_html(url):
 
     return text or "inaccessible"
 
+# --- GET WEBSITE CONTEXT ---
 async def get_website_context_async(url):
     """
     Unified function to return website's textual content.
@@ -339,6 +357,7 @@ async def get_website_context_async(url):
 
     return result
     
+# --- OVERLAP CHECK ---
 def overlap_check(text1, text2):
     """
     Check how much overlap there is between two texts.
@@ -350,27 +369,26 @@ def overlap_check(text1, text2):
     non_overlap = words2 - words1
     ratio = len(overlap) / len(words2) if words2 else 0
     print(ratio, words2)
-    print("non-overlapping words:", non_overlap)
+    print("non_overlap:", non_overlap)
     print(words1)
     return (ratio > 0.85)
 
+# --- CHECK SUBPAGE CONTEXT ---
 async def check_subpage_context(domain, backlink, text, final_label, score):
     """
     Fetch the backlink page and compare its content with the predicted text.
     If content is similar, mark as 'safe', else keep original label.
     """
-    global spam_count
     subpage_context = clean_text(await get_website_context_async(backlink))
     if subpage_context == "inaccessible":
-        spam_count += 1
         return OutputEntry(domain=domain, backlink=backlink, label=final_label, score=score)
     
     if overlap_check(subpage_context, text):
         return OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=score)
     
-    spam_count += 1
     return OutputEntry(domain=domain, backlink=backlink, label=final_label, score=score)
 
+# --- PROCESS DOAMIN ---
 async def process_domain(domain):
     if domain in domain_dict:
         return domain_dict[domain]
@@ -396,6 +414,7 @@ app = FastAPI(lifespan=lifespan)
 # oauth2_scheme = OAuth2PasswordBearer(tokenUrl="get-access-token")
 http_bearer = HTTPBearer()
 
+# --- SCHEMAS MODELS ---
 # Payload token
 class Token(BaseModel):
     access_token: str
@@ -419,6 +438,7 @@ class OutputEntry(BaseModel):
     label: str
     score: float
 
+# --- CREATE ACCESS TOKEN ---
 async def create_access_token(data: dict, expires_delta: timedelta):
     """
     Generate a JWT access token with custom expiration.
@@ -430,6 +450,7 @@ async def create_access_token(data: dict, expires_delta: timedelta):
     encoded_jwt = jwt.encode(to_encode, config.API_SECRET_KEY, algorithm=config.ALGORITHM)
     return encoded_jwt
 
+# --- VERIFY ACCESS TOKEN ---
 # async def verify_access_token(token: str = Depends(oauth2_scheme)):
 async def verify_access_token(credentials: HTTPAuthorizationCredentials = Depends(http_bearer)):
     """
@@ -456,6 +477,7 @@ async def verify_access_token(credentials: HTTPAuthorizationCredentials = Depend
         raise credentials_exception
 
 # --- ROUTES ---
+# --- ROOT ---
 # Root endpoint
 @app.get("/")
 async def root():
@@ -464,6 +486,7 @@ async def root():
     """
     return {"message": "Welcome to the THD AI Model API!", "version": config.SERVER_VERSION}
 
+# --- LOGIN FOR ACCESS TOKEN ---
 # Endpoint to get access token
 @app.post("/get-access-token", response_model=Token)
 async def login_for_access_token(secret_input: SecretKeyInput):
@@ -482,6 +505,7 @@ async def login_for_access_token(secret_input: SecretKeyInput):
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+# --- GET TOKEN INFO ---
 # Endpoint to get token
 @app.get("/get-token-info")
 async def get_token_info(current_user: str = Depends(verify_access_token)):
@@ -490,152 +514,116 @@ async def get_token_info(current_user: str = Depends(verify_access_token)):
     """
     return {"message": "Token is valid", "exp": datetime.fromtimestamp(current_user.get("exp")), "user": current_user.get("sub")}
 
+# --- PREDICT ENDPOINT ---
 # Endpoint to predict
 @app.post("/predict", response_model=List[OutputEntry], dependencies=[Depends(verify_access_token)])
 async def predict(input_data: List[InputEntry]):
-    """
-    Main prediction endpoint.
-    Steps:
-    - Validate input and model
-    - Perform classification on title and content in parallel
-    - Detect suspicious categories (gambling, movies, ecommerce)
-    - Use homepage/subpage scraping to refine decision
-    - Cache homepage results for reuse
-    - Return classified label and confidence score per input
-    """
     if model is None or tokenizer is None:
-        logging.error("Model or tokenizer not loaded. Cannot process prediction.")
         raise HTTPException(status_code=503, detail="Model not loaded. Please try again later.")
 
     MAX_BATCH_SIZE = config.MAX_BATCH_SIZE
     if len(input_data) > MAX_BATCH_SIZE:
         raise HTTPException(status_code=413, detail=f"Batch size exceeds (max={MAX_BATCH_SIZE})")
 
-    titles = [clean_text(entry.title) for entry in input_data]
-    descriptions = [clean_text(entry.description) for entry in input_data]
-    contents = [f"{title} {description}".strip() for title, description in zip(titles, descriptions)]
+    # --- STEP 1: Prepare domains and tasks concurrently ---
+    unique_domains = await asyncio.gather(*(process_domain(entry.domain) for entry in input_data))
+    unique_domains_set = set(unique_domains)
 
-    # Parallel batch classification
-    title_task = asyncio.create_task(classify_batch(titles))
-    content_task = asyncio.create_task(classify_batch(contents))
-    title_results, content_results = await asyncio.gather(title_task, content_task)
-
-    global spam_count
-    spam_count = 0
-    results = []
-    subpage_promises = []
-    subpage_mapping = []
-    homepage_promises = {}
-    homepage_domains_needed = set()
-    pending_homepage_entries = []
-    save_cache_required = False
-
-    async with httpx.AsyncClient(verify=False, timeout=20.0) as client:
-        normalized_domains = await asyncio.gather(*(process_domain(entry.domain) for entry in input_data))
-        for i, (entry, domain) in enumerate(zip(input_data, normalized_domains)):
-            try:
-                backlink = entry.backlink
-                title_label, title_score = title_results[i]
-                content_label, content_score = content_results[i]
-
-                # Classify first 15 characters of title
-                if title_label == "gambling":
-                    subpage_promises.append(check_subpage_context(domain, backlink, titles[i], "Cờ bạc", title_score))
-                    subpage_mapping.append((i, domain, backlink))
-                    continue
-                if title_label == "movies":
-                    subpage_promises.append(check_subpage_context(domain, backlink, titles[i], "Phim lậu", title_score))
-                    subpage_mapping.append((i, domain, backlink))
-                    continue
-
-                # Classify content
-                if content_label == "gambling":
-                    subpage_promises.append(check_subpage_context(domain, backlink, contents[i], "Cờ bạc", content_score))
-                    subpage_mapping.append((i, domain, backlink))
-                    continue
-                if content_label == "movies":
-                    subpage_promises.append(check_subpage_context(domain, backlink, contents[i], "Phim lậu", content_score))
-                    subpage_mapping.append((i, domain, backlink))
-                    continue
-
-                # Mark safe if not ecommerce
-                if content_label != "ecommerce":
-                    results.append(OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=content_score))
-                    continue
-
-                # Homepage check logic
-                if domain in homepage_cache:
-                    homepage_label = homepage_cache[domain]
-                else:
-                    homepage_domains_needed.add(domain)
-                    pending_homepage_entries.append((i, domain, entry.backlink, content_score))
-                    continue  # delay decision until homepage content is available
-
-                # Decision using cached homepage label
-                if homepage_label not in ["education", "government"]:
-                    results.append(OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=content_score))
-                else:
-                    subpage_promises.append(check_subpage_context(domain, backlink, contents[i], "Quảng cáo bán hàng", content_score))
-                    subpage_mapping.append((i, domain, backlink))
-
-            # Exception for each entry
-            except Exception as e:
-                logging.error(f"Error processing entry {getattr(entry, 'domain', None)}: {e}")
-                results.append(OutputEntry(
-                    domain=getattr(entry, 'domain', ''),
-                    backlink=getattr(entry, 'backlink', ''),
-                    label="Predict error",
-                    score=0.0
-                ))
-
-    # Fire all homepage fetches in parallel
     homepage_tasks = {
         domain: asyncio.create_task(get_website_context_async(f"https://{domain}/"))
-        for domain in homepage_domains_needed
+        for domain in unique_domains_set if domain not in homepage_cache
     }
+
+    # Start classification tasks for titles and contents concurrently
+    titles_all = [clean_text(entry.title) for entry in input_data]
+    contents_all = [f"{clean_text(entry.title)} {clean_text(entry.description)}".strip() for entry in input_data]
+
+    title_classify_task = asyncio.create_task(classify_batch(titles_all))
+    content_classify_task = asyncio.create_task(classify_batch(contents_all))
+
+    # Await homepage fetch concurrently
     homepage_results = await asyncio.gather(*homepage_tasks.values(), return_exceptions=True)
     homepage_context_map = dict(zip(homepage_tasks.keys(), homepage_results))
 
-    # Classify homepage and resolve deferred decisions
-    for i, domain, backlink, content_score in pending_homepage_entries:
-        homepage_context = homepage_context_map.get(domain)
+    # --- STEP 2: Classify and cache accessible homepages in one batch ---
+    homepages_to_classify = [
+        (domain, context)
+        for domain, context in homepage_context_map.items()
+        if not isinstance(context, Exception) and context != "inaccessible"
+    ]
 
-        if isinstance(homepage_context, Exception) or homepage_context == "inaccessible":
-            results.append(OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=content_score))
+    if homepages_to_classify:
+        homepage_labels = await classify_batch([ctx for _, ctx in homepages_to_classify])
+        for (domain, _), (label, _) in zip(homepages_to_classify, homepage_labels):
+            homepage_cache[domain] = label
+
+    await save_cache()
+
+    # --- STEP 3: Finish title and content classification ---
+    title_results, content_results = await asyncio.gather(title_classify_task, content_classify_task)
+
+    results = [None] * len(input_data)
+
+    # Map homepage gambling labels
+    for i, (entry, domain) in enumerate(zip(input_data, unique_domains)):
+        label = homepage_cache.get(domain)
+        if label == "gambling":
+            results[i] = OutputEntry(domain=domain, backlink=entry.backlink, label="Cờ bạc", score=1.0)
+
+    # --- STEP 4: Use classification results for remaining entries ---
+    subpage_promises = []
+    for i, (entry, domain) in enumerate(zip(input_data, unique_domains)):
+        if results[i] is not None:
             continue
 
-        try:
-            homepage_result = await classify_batch([homepage_context])
-            homepage_label, homepage_score = homepage_result[0]
-            homepage_cache[domain] = homepage_label
-            save_cache_required = True
+        title_label, title_score = title_results[i]
+        content_label, content_score = content_results[i]
 
-            if homepage_label not in ["education", "government"]:
-                results.append(OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=content_score))
-            else:
-                subpage_promises.append(check_subpage_context(domain, backlink, contents[i], "Quảng cáo bán hàng", content_score))
-                subpage_mapping.append((i, domain, backlink))
+        if title_label == "gambling":
+            subpage_promises.append(check_subpage_context(domain, entry.backlink, titles_all[i], "Cờ bạc", title_score))
+            continue
+        if title_label == "movies":
+            subpage_promises.append(check_subpage_context(domain, entry.backlink, titles_all[i], "Phim lậu", title_score))
+            continue
 
-        except Exception as e:
-            logging.error(f"Error classifying homepage for domain={domain}: {e}")
-            results.append(OutputEntry(domain=domain, backlink=backlink, label="Predict error", score=0.0))
+        if content_label == "gambling":
+            subpage_promises.append(check_subpage_context(domain, entry.backlink, contents_all[i], "Cờ bạc", content_score))
+            continue
+        if content_label == "movies":
+            subpage_promises.append(check_subpage_context(domain, entry.backlink, contents_all[i], "Phim lậu", content_score))
+            continue
 
-    # Resolve all subpage checks
+        results[i] = OutputEntry(domain=domain, backlink=entry.backlink, label="An toàn", score=content_score)
+
     if subpage_promises:
         subpage_results = await asyncio.gather(*subpage_promises, return_exceptions=True)
-        for result in subpage_results:
-            if isinstance(result, OutputEntry):
-                results.append(result)
-            else:
-                logging.warning(f"Subpage check failed: {result}")
+        for res in subpage_results:
+            if isinstance(res, OutputEntry):
+                for j in range(len(results)):
+                    if results[j] is None:
+                        results[j] = res
+                        break
 
-    # Save homepage cache once
-    if save_cache_required:
-        await save_cache()
+    for i, res in enumerate(results):
+        if res is None:
+            entry = input_data[i]
+            domain = unique_domains[i]
+            results[i] = OutputEntry(domain=domain, backlink=entry.backlink, label="Predict error", score=0.0)
+
+     # --- STEP 5: Adjust labels for low spam ratio ---
+    spam_labels = ["Cờ bạc", "Phim lậu", "Quảng cáo bán hàng"]
+    spam_count = sum(1 for r in results if r.label in spam_labels)
+
+    print("spam count:", spam_count)
+    print("length of input_data:", len(input_data))
+    print("spam ratio:", spam_count / len(input_data))
 
     if spam_count / len(input_data) <= 0.15:
         for r in results:
-            if r.label in ["Cờ bạc", "Phim lậu", "Quảng cáo bán hàng"]:
+            # Do not override gambling that skipped title/content checks
+            domain = await process_domain(r.domain)
+            homepage_label = homepage_cache.get(domain)
+            if homepage_label != "gambling" and r.label in spam_labels:
                 r.label = "An toàn"
 
     return results
