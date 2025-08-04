@@ -1,5 +1,5 @@
 # --- IMPORT LIBRARIES AND FRAMEWORKS ---
-import const as config
+import config.const as config
 import json
 import os
 import re
