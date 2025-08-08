@@ -90,20 +90,23 @@ def load_cache():
     This helps avoid redundant website fetch/classification.
     """
     global homepage_cache
-    if os.path.exists(config.CACHE_FILE):
+    cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), config.CACHE_FILE)
+    
+    if os.path.exists(cache_file):
         try:
-            with open(config.CACHE_FILE, "r", encoding="utf-8") as f:
+            with open(cache_file, "r", encoding="utf-8") as f:
                 homepage_cache = json.load(f)
-            logging.info(f"Cache loaded from {config.CACHE_FILE}")
-        except (json.JSONDecodeError, OSError):
-            logging.error("Failed to load cache file, starting with an empty cache.")
+            logging.info(f"Cache loaded from {cache_file}")
+        except (json.JSONDecodeError, OSError) as e:
+            logging.error(f"Failed to load cache file: {e}. Starting with an empty cache.")
             print("[WARN] Cache file is empty or corrupted. Starting fresh.")
             homepage_cache = {}
     else:
-        # Ensure directory exists for future saves
-        os.makedirs(os.path.dirname(config.CACHE_FILE), exist_ok=True)
+        # Ensure the directory exists
+        cache_dir = os.path.dirname(cache_file)
+        os.makedirs(cache_dir, exist_ok=True)
         homepage_cache = {}
-        logging.info(f"No cache file found at {config.CACHE_FILE}, starting with empty cache.")
+        logging.info(f"No cache file found at {cache_file}, starting with empty cache.")
 
 # --- SAVE HOMECACHE ---
 async def save_cache():
@@ -112,11 +115,17 @@ async def save_cache():
     Uses async lock to ensure thread safety during writing.
     """
     try:
-        os.makedirs(os.path.dirname(config.CACHE_FILE), exist_ok=True)
+        # Get the directory for the cache file
+        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.path.dirname(config.CACHE_FILE))
+        cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), config.CACHE_FILE)
+
+        # Create the directory if it doesn't exist
+        os.makedirs(cache_dir, exist_ok=True)
+        
         async with cache_lock:
-            with open(config.CACHE_FILE, "w", encoding="utf-8") as f:
+            with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump(homepage_cache, f, ensure_ascii=False, indent=2)
-        logging.info(f"Cache saved to {config.CACHE_FILE}")
+        logging.info(f"Cache saved to {cache_file}")
     except Exception as e:
         logging.error(f"Failed to save cache: {e}")
         print("[ERROR] Failed to save cache. Check logs for details.")
@@ -610,7 +619,7 @@ async def predict(input_data: List[InputEntry]):
     label_map = {
         "gambling": "Cờ bạc",
         "movies": "Phim lậu",
-        "ecommerce": "Quảng cáo bán hàng"
+        # "ecommerce": "Quảng cáo bán hàng"
     }
 
     for i, (entry, domain) in enumerate(zip(input_data, unique_domains)):
