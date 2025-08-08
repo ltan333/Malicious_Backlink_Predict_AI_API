@@ -24,6 +24,7 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import tldextract
+import py_vncorenlp
 
 # --- LOGGING ---
 logging.basicConfig(
@@ -41,6 +42,7 @@ domain_dict = {}
 # --- MODEL ---
 model = None
 tokenizer = None
+rdrsegmenter = None
 
 # --- DEVICE ---
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -122,7 +124,7 @@ def load_model():
     This is called once during app startup.
     """
     global model, tokenizer
-    model_path = r"models\phobert_base_v7"
+    model_path = r"models\phobert_base_v8"
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         model = AutoModelForSequenceClassification.from_pretrained(model_path, local_files_only=True).to(device).eval()
@@ -151,18 +153,16 @@ async def classify_batch(texts: List[str]):
                 results.append((id2label[preds[i].item()], scores[i].item()))
     return results
 
-# --- CLEAN TEXT ---
+# --- SEGMENT AND CLEAN TEXT ---
 def clean_text(text):   
-    text = text.lower()
-
     # Preserve domain dots, decimal dots, and URL hyphens
     text = re.sub(r'(\w)\.(?=\w)', r'\1<DOMAIN>', text)
     text = re.sub(r'(\d)\.(?=\d)', r'\1<DECIMAL>', text)
     text = re.sub(r'(\w)-(?=\w)', r'\1<HYPHEN>', text)
 
     # Remove remaining dots and hyphens
-    text = text.replace('.', '')
-    text = text.replace('-', '')
+    text = text.replace('.', ' ')
+    text = text.replace('-', ' ')
 
     # Replace one or more underscores with a single space
     text = re.sub(r'_+', ' ', text)
@@ -185,16 +185,20 @@ def clean_text(text):
     
     return text
 
+def preprocess_text(text: str) -> str:
+    """Segments Vietnamese text and cleans it for inference."""
+    text = clean_text(text)
+    if rdrsegmenter:
+        text = ' '.join(rdrsegmenter.word_segment(text))
+    return text
+
 # --- SCRAPER ---
 # --- CHECK URL ---
-def is_accessible(url, timeout=5):
-    """
-    Check if a given URL is accessible (status code < 400).
-    Sends a HEAD request using httpx.
-    """
+async def is_accessible(url, timeout=5):
     try:
-        response = httpx.head(url, timeout=timeout, follow_redirects=True, verify=False)
-        return response.status_code < 400
+        async with httpx.AsyncClient(follow_redirects=True, verify=False, timeout=timeout) as client:
+            response = await client.head(url)
+            return response.status_code < 400
     except:
         return False
 
@@ -264,7 +268,7 @@ async def handle_pdf(url):
     pdf_data = fetch_pdf_httpx(url) or await fetch_pdf_playwright(url)
     if pdf_data:
         text = extract_pdf_text(pdf_data)
-        return text if text else "inaccessible"
+        return preprocess_text(text) if text else "inaccessible"
     return "inaccessible"
 
 # --- FETCH STATIC HTML ---
@@ -311,6 +315,7 @@ async def handle_html(url):
     """
     static_html = fetch_static_html(url)
     if not static_html:
+        print(f"not static html for {url}")
         return "inaccessible"
 
     soup = BeautifulSoup(static_html, "html.parser")
@@ -343,7 +348,7 @@ async def get_website_context_async(url):
     Unified function to return website's textual content.
     Decides whether the URL is a PDF or HTML and handles accordingly.
     """
-    if not is_accessible(url):
+    if not await is_accessible(url):
         return "inaccessible"
 
     ext = Path(urlparse(url).path).suffix.lower()
@@ -361,17 +366,17 @@ async def get_website_context_async(url):
 def overlap_check(text1, text2):
     """
     Check how much overlap there is between two texts.
-    If the overlap ratio is greater than 85%, treat them as similar.
+    If the overlap ratio is greater than 50%, treat them as similar.
     """
-    words1 = set(text1.lower().split())
-    words2 = set(text2.lower().split())
+    words1 = set(text1.lower().replace("_", " ").split())
+    words2 = set(text2.lower().replace("_", " ").split())
     overlap = words1.intersection(words2)
     non_overlap = words2 - words1
     ratio = len(overlap) / len(words2) if words2 else 0
     print(ratio, words2)
     print("non_overlap:", non_overlap)
     print(words1)
-    return (ratio > 0.85)
+    return (ratio > 0.5)
 
 # --- CHECK SUBPAGE CONTEXT ---
 async def check_subpage_context(domain, backlink, text, final_label, score):
@@ -379,13 +384,17 @@ async def check_subpage_context(domain, backlink, text, final_label, score):
     Fetch the backlink page and compare its content with the predicted text.
     If content is similar, mark as 'safe', else keep original label.
     """
-    subpage_context = clean_text(await get_website_context_async(backlink))
+    subpage_context = preprocess_text(await get_website_context_async(backlink))
     if subpage_context == "inaccessible":
+        if final_label == "Quảng cáo bán hàng":
+            print(f"backlink {backlink} inaccessible, return quang cao ban hang")
         return OutputEntry(domain=domain, backlink=backlink, label=final_label, score=score)
     
     if overlap_check(subpage_context, text):
         return OutputEntry(domain=domain, backlink=backlink, label="An toàn", score=score)
     
+    if final_label == "Quảng cáo bán hàng":
+        print(f"backlink {backlink} not overlap enough, return quang cao ban hang")
     return OutputEntry(domain=domain, backlink=backlink, label=final_label, score=score)
 
 # --- PROCESS DOAMIN ---
@@ -407,6 +416,28 @@ async def lifespan(app: FastAPI):
     logging.info(f"Running on device with: {device}")
     load_cache()
     load_model()
+
+    # Initialize VnCoreNLP segmenter
+    vncorenlp_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "models",
+        "vncorenlp"
+    )
+
+    os.makedirs(vncorenlp_dir, exist_ok=True)
+
+    # Download VnCoreNLP model if not already present
+    if not os.path.exists(os.path.join(vncorenlp_dir, "VnCoreNLP-1.2.jar")):
+        logging.info("Downloading VnCoreNLP model...")
+        py_vncorenlp.download_model(save_dir=vncorenlp_dir)
+    
+    global rdrsegmenter
+    rdrsegmenter = py_vncorenlp.VnCoreNLP(
+        save_dir=vncorenlp_dir,
+        annotators=["wseg"]
+    )
+    
+    logging.info("VnCoreNLP segmenter loaded")
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -535,8 +566,8 @@ async def predict(input_data: List[InputEntry]):
     }
 
     # Start classification tasks for titles and contents concurrently
-    titles_all = [clean_text(entry.title) for entry in input_data]
-    contents_all = [f"{clean_text(entry.title)} {clean_text(entry.description)}".strip() for entry in input_data]
+    titles_all = [preprocess_text(entry.title) for entry in input_data]
+    contents_all = [f"{preprocess_text(entry.title)} {preprocess_text(entry.description)}".strip() for entry in input_data]
 
     title_classify_task = asyncio.create_task(classify_batch(titles_all))
     content_classify_task = asyncio.create_task(classify_batch(contents_all))
@@ -553,7 +584,7 @@ async def predict(input_data: List[InputEntry]):
     ]
 
     if homepages_to_classify:
-        homepage_labels = await classify_batch([ctx for _, ctx in homepages_to_classify])
+        homepage_labels = await classify_batch([preprocess_text(ctx) for _, ctx in homepages_to_classify])
         for (domain, _), (label, _) in zip(homepages_to_classify, homepage_labels):
             homepage_cache[domain] = label
 
@@ -566,12 +597,18 @@ async def predict(input_data: List[InputEntry]):
 
     # Map homepage gambling labels
     for i, (entry, domain) in enumerate(zip(input_data, unique_domains)):
-        label = homepage_cache.get(domain)
-        if label == "gambling":
+        homepage_label = homepage_cache.get(domain)
+        if homepage_label == "gambling":
             results[i] = OutputEntry(domain=domain, backlink=entry.backlink, label="Cờ bạc", score=1.0)
 
     # --- STEP 4: Use classification results for remaining entries ---
     subpage_promises = []
+    label_map = {
+        "gambling": "Cờ bạc",
+        "movies": "Phim lậu",
+        "ecommerce": "Quảng cáo bán hàng"
+    }
+
     for i, (entry, domain) in enumerate(zip(input_data, unique_domains)):
         if results[i] is not None:
             continue
@@ -579,21 +616,24 @@ async def predict(input_data: List[InputEntry]):
         title_label, title_score = title_results[i]
         content_label, content_score = content_results[i]
 
-        if title_label == "gambling":
-            subpage_promises.append(check_subpage_context(domain, entry.backlink, titles_all[i], "Cờ bạc", title_score))
-            continue
-        if title_label == "movies":
-            subpage_promises.append(check_subpage_context(domain, entry.backlink, titles_all[i], "Phim lậu", title_score))
-            continue
-
-        if content_label == "gambling":
-            subpage_promises.append(check_subpage_context(domain, entry.backlink, contents_all[i], "Cờ bạc", content_score))
-            continue
-        if content_label == "movies":
-            subpage_promises.append(check_subpage_context(domain, entry.backlink, contents_all[i], "Phim lậu", content_score))
+        if title_label in label_map:
+            label_text = label_map[title_label]
+            # print(f'checking title for {label_text}')
+            subpage_promises.append(check_subpage_context(domain, entry.backlink, titles_all[i], label_text, title_score))
             continue
 
-        results[i] = OutputEntry(domain=domain, backlink=entry.backlink, label="An toàn", score=content_score)
+        if content_label in label_map:
+            label_text = label_map[content_label]
+            # print(f'checking content for {label_text}')
+            subpage_promises.append(check_subpage_context(domain, entry.backlink, contents_all[i], label_text, content_score))
+            continue
+
+        # print(f'both title and content are safe, no scraping needed, return an toan')
+        # Final fallback: both title and content are "safe" — check backlink accessibility
+        if not await is_accessible(entry.backlink):
+            results[i] = OutputEntry(domain=domain, backlink=entry.backlink, label="Cờ bạc", score=1.0)
+        else:
+            results[i] = OutputEntry(domain=domain, backlink=entry.backlink, label="An toàn", score=content_score)
 
     if subpage_promises:
         subpage_results = await asyncio.gather(*subpage_promises, return_exceptions=True)

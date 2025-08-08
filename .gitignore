@@ -214,4 +214,5 @@ logs/api_server.log
 
 # Const and Model PhoBERT
 config/const.py
-models/phobert_base_v7
+models/phobert_base_v8
+models/vncorenlp
