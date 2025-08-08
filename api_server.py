@@ -100,7 +100,10 @@ def load_cache():
             print("[WARN] Cache file is empty or corrupted. Starting fresh.")
             homepage_cache = {}
     else:
+        # Ensure directory exists for future saves
+        os.makedirs(os.path.dirname(config.CACHE_FILE), exist_ok=True)
         homepage_cache = {}
+        logging.info(f"No cache file found at {config.CACHE_FILE}, starting with empty cache.")
 
 # --- SAVE HOMECACHE ---
 async def save_cache():
@@ -109,6 +112,7 @@ async def save_cache():
     Uses async lock to ensure thread safety during writing.
     """
     try:
+        os.makedirs(os.path.dirname(config.CACHE_FILE), exist_ok=True)
         async with cache_lock:
             with open(config.CACHE_FILE, "w", encoding="utf-8") as f:
                 json.dump(homepage_cache, f, ensure_ascii=False, indent=2)
@@ -630,10 +634,10 @@ async def predict(input_data: List[InputEntry]):
 
         # print(f'both title and content are safe, no scraping needed, return an toan')
         # Final fallback: both title and content are "safe" — check backlink accessibility
-        if not await is_accessible(entry.backlink):
-            results[i] = OutputEntry(domain=domain, backlink=entry.backlink, label="Cờ bạc", score=1.0)
-        else:
-            results[i] = OutputEntry(domain=domain, backlink=entry.backlink, label="An toàn", score=content_score)
+        # if not await is_accessible(entry.backlink):
+        #     results[i] = OutputEntry(domain=domain, backlink=entry.backlink, label="Cờ bạc", score=1.0)
+        # else:
+        results[i] = OutputEntry(domain=domain, backlink=entry.backlink, label="An toàn", score=content_score)
 
     if subpage_promises:
         subpage_results = await asyncio.gather(*subpage_promises, return_exceptions=True)
