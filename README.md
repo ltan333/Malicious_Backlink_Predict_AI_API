@@ -28,7 +28,45 @@ Optimized for **Linux (Ubuntu)** with **GPU acceleration**.
 ├── .gitignore                  # Specifies files/folders to exclude from Git
 └── Models_Configs.txt          # Instructions for downloading pre-trained model weights and configs
 ```
-
+(venv) ubuntu@ai-model:~/Malicious_Backlink_Predict_AI_API$ tree
+.
+├── api_server.py
+├── config
+│   ├── const.py
+│   └── download_configs.txt
+├── docker-compose.yml
+├── Dockerfile
+├── homepage_cache
+│   └── homepage_cache.json
+├── models
+│   ├── download_models.txt
+│   ├── phobert_base_v8
+│   │   ├── added_tokens.json
+│   │   ├── bpe.codes
+│   │   ├── config.json
+│   │   ├── model.safetensors
+│   │   ├── special_tokens_map.json
+│   │   ├── tokenizer_config.json
+│   │   ├── training_args.bin
+│   │   └── vocab.txt
+│   └── vncorenlp
+│       ├── models
+│       │   ├── dep
+│       │   │   └── vi-dep.xz
+│       │   ├── ner
+│       │   │   ├── vi-500brownclusters.xz
+│       │   │   ├── vi-ner.xz
+│       │   │   └── vi-pretrainedembeddings.xz
+│       │   ├── postagger
+│       │   │   └── vi-tagger
+│       │   └── wordsegmenter
+│       │       ├── vi-vocab
+│       │       └── wordsegmenter.rdr
+│       └── VnCoreNLP-1.2.jar
+├── others
+│   └── test_cuda.py
+├── README.md
+└── requirements.txt
 ---
 
 # You can run this project with 2 ways on Linux(Ubuntu) or Windows OS:

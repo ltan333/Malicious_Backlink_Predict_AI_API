@@ -137,7 +137,7 @@ def load_model():
     This is called once during app startup.
     """
     global model, tokenizer
-    model_path = r"models\phobert_base_v8"
+    model_path = "models/phobert_base_v8"
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         model = AutoModelForSequenceClassification.from_pretrained(model_path, local_files_only=True).to(device).eval()
