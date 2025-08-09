@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   api:
     # Build the Docker image using the Dockerfile in the current directory
