@@ -11,25 +11,6 @@ Optimized for **Linux (Ubuntu)** with **GPU acceleration**.
 
 ### File name project: "Malicious_Backlink_Predict_AI_API"
 ```
-.
-├── Homepage_Cache/
-│   └── homepage_cache.json     # Cache for homepage results
-├── Logs/
-│   └── api_server.log          # Cache for logs when expose API
-├── Models/
-│   └── phobert_base_v4         # Fine-tuned PhoBERT model weights (version 4)
-├── api_server.py               # Main script to launch the API server (FastAPI)
-├── const.py                    # Constants used throughout the project
-├── test_cuda.py                # Script to test CUDA availability and GPU setup
-├── requirements.txt            # Python dependency list
-├── Dockerfile                  # Instructions to build the Docker image
-├── docker-compose.yml          # Multi-service orchestration with Docker Compose
-├── README.md                   # Project overview, setup instructions, and usage guide
-├── .gitignore                  # Specifies files/folders to exclude from Git
-└── Models_Configs.txt          # Instructions for downloading pre-trained model weights and configs
-```
-
-```
 (venv) ubuntu@ai-model:~/Malicious_Backlink_Predict_AI_API$ tree
 .
 ├── api_server.py
@@ -78,7 +59,7 @@ Optimized for **Linux (Ubuntu)** with **GPU acceleration**.
 # 🚀 Getting Started with Terminal
 
 ### 🔧 Requirements
-- **Python** `3.10.12`
+- **Python** `3.10.10`
 - **PyTorch** `2.2.2 + CUDA 12.1`
 - **Linux (Ubuntu)** with **NVIDIA GPU**
 
@@ -268,8 +249,9 @@ docker-compose down
 
 ## 📦 Notes
 
-- Download Model weights and Configs as instructed in `Models_Configs.txt`.
-- The API is designed to handle batch predictions and supports caching via `Homepage_Cache`.
+- Download Model weights and VNCoreNLP as instructed in `Download_Models.txt`.
+- Download Configs as instructed in `Download_Configs.txt`.
+- The API is designed to handle batch predictions and supports caching via `homepage_cache`.
 
 ---
 
