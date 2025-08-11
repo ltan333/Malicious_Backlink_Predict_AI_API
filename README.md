@@ -28,6 +28,8 @@ Optimized for **Linux (Ubuntu)** with **GPU acceleration**.
 ├── .gitignore                  # Specifies files/folders to exclude from Git
 └── Models_Configs.txt          # Instructions for downloading pre-trained model weights and configs
 ```
+
+```
 (venv) ubuntu@ai-model:~/Malicious_Backlink_Predict_AI_API$ tree
 .
 ├── api_server.py
@@ -67,6 +69,8 @@ Optimized for **Linux (Ubuntu)** with **GPU acceleration**.
 │   └── test_cuda.py
 ├── README.md
 └── requirements.txt
+```
+
 ---
 
 # You can run this project with 2 ways on Linux(Ubuntu) or Windows OS:
