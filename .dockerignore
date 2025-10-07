@@ -9,6 +9,9 @@ __pycache__/
 
 README.md
 
-homepage_cache/
-logs/
-others/
+app/homepage_cache/
+app/logs/
+app/tests/
+
+app/cores/download_configs.txt
+app/models/models_phobert/download_models.txt

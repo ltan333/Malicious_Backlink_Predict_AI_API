@@ -206,13 +206,16 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# ===========================================
 # Log files
-logs/api_server.log
+app/logs/api_server.log
 
 # Homepage_Cache files
-# homepage_cache/homepage_cache.json
+app/homepage_cache/homepage_cache.json
 
 # Const and Model PhoBERT
-config/const.py
-models/phobert_base_v8
-models/vncorenlp
+app/cores/config.py
+
+# Model PhoBERT and VnCoreNLP
+app/models/models_phobert/phobert_base_v9
+app/models/models_phobert/vncorenlp

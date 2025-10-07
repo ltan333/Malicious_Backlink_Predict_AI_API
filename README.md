@@ -2,66 +2,86 @@
 
 # 🚨 Malicious Backlink Prediction API
 
-This project provides an API for detecting **malicious backlinks** using a pre-trained AI model (PhoBERT).  
+This project provides an **enhanced API** for detecting **malicious backlinks** using a pre-trained AI model (PhoBERT).  
+The application has been **refactored** into a clean, modular structure for better maintainability and scalability.  
 Optimized for **Linux (Ubuntu)** with **GPU acceleration**.
 
 ---
 
 ## 📁 Project Structure
 
-### File name project: "Malicious_Backlink_Predict_AI_API"
+### File name project: "Malicious_Backlink_Predict_AI_API_Refactor"
 ```
-(venv) ubuntu@ai-model:~/Malicious_Backlink_Predict_AI_API$ tree
-.
-├── api_server.py
-├── config
-│   ├── const.py
-│   └── download_configs.txt
-├── docker-compose.yml
-├── Dockerfile
-├── homepage_cache
-│   └── homepage_cache.json
-├── models
-│   ├── download_models.txt
-│   ├── phobert_base_v8
-│   │   ├── added_tokens.json
-│   │   ├── bpe.codes
-│   │   ├── config.json
-│   │   ├── model.safetensors
-│   │   ├── special_tokens_map.json
-│   │   ├── tokenizer_config.json
-│   │   ├── training_args.bin
-│   │   └── vocab.txt
-│   └── vncorenlp
-│       ├── models
-│       │   ├── dep
-│       │   │   └── vi-dep.xz
-│       │   ├── ner
-│       │   │   ├── vi-500brownclusters.xz
-│       │   │   ├── vi-ner.xz
-│       │   │   └── vi-pretrainedembeddings.xz
-│       │   ├── postagger
-│       │   │   └── vi-tagger
-│       │   └── wordsegmenter
-│       │       ├── vi-vocab
-│       │       └── wordsegmenter.rdr
-│       └── VnCoreNLP-1.2.jar
-├── others
-│   └── test_cuda.py
-├── README.md
-└── requirements.txt
+Malicious_Backlink_Predict_AI_API_Refactor/
+├── app/                                    # Main application directory
+│   ├── main.py                            # Application entry point
+│   ├── api/                               # API layer
+│   │   └── api_server.py                  # FastAPI application setup
+│   ├── cores/                             # Core functionality
+│   │   ├── config.py                      # Configuration settings
+│   │   ├── logging.py                     # Logging configuration
+│   │   └── security.py                    # JWT authentication
+│   ├── models/                            # AI models and loading
+│   │   ├── load_models.py                 # PhoBERT model loader
+│   │   ├── load_vncorenlp.py              # Vietnamese NLP processor
+│   │   └── models_phobert/                # Model files
+│   │       ├── phobert_base_v9/            # PhoBERT model weights
+│   │       └── vncorenlp/                  # Vietnamese NLP models
+│   ├── routers/                           # API route handlers
+│   │   ├── routes_auth.py                 # Authentication endpoints
+│   │   └── routes_predict.py              # Prediction endpoints
+│   ├── schemas/                           # Pydantic data models
+│   │   └── schemas.py                     # Request/Response schemas
+│   ├── services/                          # Business logic services
+│   │   ├── cache_service.py               # Homepage caching
+│   │   ├── redirect_service.py            # Redirect detection
+│   │   └── scraping_service.py            # Web scraping & content analysis
+│   ├── utils/                             # Utility functions
+│   │   └── preprocessing.py               # Text preprocessing
+│   ├── datasets/                          # Custom dataset classes
+│   │   └── custom_dataset.py              # Text dataset for inference
+│   ├── homepage_cache/                    # Cached homepage classifications
+│   │   └── homepage_cache.json
+│   ├── logs/                              # Application logs
+│   │   └── api_server.log
+│   └── tests/                             # Test files
+│       └── test_cuda.py
+├── docker-compose.yml                     # Docker Compose configuration
+├── Dockerfile                             # Docker image definition
+├── requirements.txt                       # Python dependencies
+└── README.md                              # This file
 ```
 
 ---
 
-# You can run this project with 2 ways on Linux(Ubuntu) or Windows OS:
+## 🆕 What's New in the Refactored Version
 
-# 🚀 Getting Started with Terminal
+### ✨ **Enhanced Features**
+- **🔧 Modular Architecture**: Clean separation of concerns with organized modules
+- **🚀 Enhanced Scraping**: Improved web scraping with Playwright and HTTP/2 support
+- **🛡️ Advanced Security**: JWT-based authentication with token validation
+- **📊 Smart Caching**: Intelligent homepage caching for faster predictions
+- **🔄 Redirect Detection**: Advanced redirect parameter detection and handling
+- **🌐 Multi-format Support**: Enhanced PDF and HTML content processing
+- **⚡ Performance Optimized**: Connection pooling and concurrent processing
+- **📝 Comprehensive Logging**: Detailed logging for debugging and monitoring
+
+### 🏗️ **Architecture Improvements**
+- **Separation of Concerns**: Each module has a specific responsibility
+- **Dependency Injection**: Clean dependency management
+- **Error Handling**: Robust error handling throughout the application
+- **Type Safety**: Full type hints for better code quality
+- **Async/Await**: Fully asynchronous for better performance
+
+---
+
+## 🚀 Getting Started
 
 ### 🔧 Requirements
 - **Python** `3.10.10`
 - **PyTorch** `2.2.2 + CUDA 12.1`
-- **Linux (Ubuntu)** with **NVIDIA GPU**
+- **Linux (Ubuntu)** with **NVIDIA GPU** (recommended)
+- **Java 21** (for VnCoreNLP)
 
 ---
 
@@ -70,13 +90,13 @@ Optimized for **Linux (Ubuntu)** with **GPU acceleration**.
 1. **Clone the repository or Download project**
    ```bash
    git clone https://github.com/ltan333/Malicious_Backlink_Predict_AI_API.git
-   cd Malicious_Backlink_Predict_AI_API
+   cd Malicious_Backlink_Predict_AI_API_Refactor
    ```
 
 2. **Create and activate virtual environment**
    ```bash
    python3 -m venv venv
-   source venv/bin/activate
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
 3. **Install PyTorch with CUDA**
@@ -91,15 +111,75 @@ Optimized for **Linux (Ubuntu)** with **GPU acceleration**.
 
 5. **Test CUDA availability**
    ```bash
-   python3 test_cuda.py
+   python3 app/tests/test_cuda.py
    ```
 
-6. **Expose API**
+6. **Run the API Server**
    ```bash
-   python3 API_Server.py
+   python3 app/main.py
    ```
 
-# 🐳 Getting Started with Docker Compose
+   Or using the module approach:
+   ```bash
+   python3 -m app.main
+   ```
+
+The API will be available at:  
+📍 `http://localhost:8000`
+
+---
+
+## 📚 API Documentation
+
+### 🔐 Authentication
+
+First, obtain an access token:
+
+```bash
+curl -X POST "http://localhost:8000/get-access-token" \
+     -H "Content-Type: application/json" \
+     -d '{"api_key": "jlG7BdO4V8vZF2yWO02XWzETK36Rbu5W45h5acrARZV6Kz75148r90D9xRYwkex9"}'
+```
+
+### 🎯 Prediction Endpoint
+
+```bash
+curl -X POST "http://localhost:8000/predict" \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+     -d '[
+       {
+         "domain": "example.com",
+         "backlink": "https://example.com/page",
+         "title": "Sample Title",
+         "description": "Sample description"
+       }
+     ]'
+```
+
+### 📋 Response Format
+
+```json
+[
+  {
+    "domain": "example.com",
+    "backlink": "https://example.com/page",
+    "label": "An toàn",
+    "score": 0.95
+  }
+]
+```
+
+### 🏷️ Label Types
+
+- **"An toàn"**: Safe/legitimate content
+- **"Cờ bạc"**: Gambling content
+- **"Phim lậu"**: Pirated movie content
+- **"Quảng cáo bán hàng"**: Commercial advertising
+
+---
+
+## 🐳 Getting Started with Docker Compose
 
 This section guides you through:
 
@@ -118,7 +198,7 @@ sudo apt update
 sudo apt install -y ca-certificates curl gnupg lsb-release
 ```
 
-Add Docker’s official GPG key:
+Add Docker's official GPG key:
 
 ```bash
 sudo mkdir -p /etc/apt/keyrings
@@ -172,18 +252,18 @@ Make sure your project has:
 In your project root directory:
 
 ```bash
-cd Malicious_Backlink_Predict_AI_API
+cd Malicious_Backlink_Predict_AI_API_Refactor
 docker-compose up --build
 ```
 
 Or
 ```bash
-cd Malicious_Backlink_Predict_AI_API
+cd Malicious_Backlink_Predict_AI_API_Refactor
 docker-compose up -d --build # Runs the containers in the background (detached mode)
 ```
 
 The API will be available at:  
-📍 `http://localhost:8000/predict`
+📍 `http://localhost:8000`
 
 ---
 
@@ -225,18 +305,18 @@ docker-compose --version
 Navigate to your project folder using terminal:
 
 ```bash
-cd Malicious_Backlink_Predict_AI_API
+cd Malicious_Backlink_Predict_AI_API_Refactor
 docker-compose up --build
 ```
 
 Or
 ```bash
-cd Malicious_Backlink_Predict_AI_API
+cd Malicious_Backlink_Predict_AI_API_Refactor
 docker-compose up -d --build # Runs the containers in the background (detached mode)
 ```
 
 The API will be available at:  
-📍 `http://localhost:8000/predict`
+📍 `http://localhost:8000`
 
 ---
 
@@ -246,12 +326,56 @@ The API will be available at:
 docker-compose down
 ```
 
+---
+
+## 🔧 Configuration
+
+### Environment Variables
+
+The application can be configured through `app/cores/config.py`:
+
+```python
+# Server Configuration
+SERVER_VERSION = "v1.0"
+SERVER_PORT = 8000
+SERVER_HOST = "0.0.0.0"
+
+# Model Configuration
+MAX_BATCH_SIZE = 64
+
+# Authentication
+API_SECRET_KEY = "your-secret-key"
+ACCESS_TOKEN_EXPIRE_SECOND = 86400  # 24 hours
+
+# Spam Detection
+SPAM_LABELS = ("Cờ bạc", "Phim lậu", "Quảng cáo bán hàng")
+```
+
+---
 
 ## 📦 Notes
 
-- Download Model weights and VNCoreNLP as instructed in `Download_Models.txt`.
-- Download Configs as instructed in `Download_Configs.txt`.
-- The API is designed to handle batch predictions and supports caching via `homepage_cache`.
+- Download Model weights and VnCoreNLP as instructed in `app/models/models_phobert/download_models.txt`
+- Download Configs as instructed in `app/cores/download_configs.txt`
+- The API is designed to handle batch predictions and supports intelligent caching via `homepage_cache`
+- Enhanced with advanced web scraping capabilities using Playwright
+- Supports both static and dynamic content analysis
+- Includes comprehensive redirect detection and handling
+
+---
+
+## 🧪 Testing
+
+Run the test suite to verify everything is working:
+
+```bash
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from app.api.api_server import app
+print('✅ API server imports successfully')
+"
+```
 
 ---
 

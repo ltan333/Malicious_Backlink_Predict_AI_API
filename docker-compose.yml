@@ -16,9 +16,9 @@ services:
     # Mount local folders/files into the container
     volumes:
       # Mount the Homepage_Cache directory
-      - ./homepage_cache:/app/homepage_cache
+      - ./app/homepage_cache:/app/app/homepage_cache
       # Mount the log file
-      - ./logs:/app/logs
+      - ./app/logs:/app/app/logs
 
     # Ports
     ports:

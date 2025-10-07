@@ -29,4 +29,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run the FastAPI app
-CMD ["python", "api_server.py"]
+CMD ["python", "-m", "app.main"]
