@@ -7,9 +7,11 @@ __pycache__/
 .git/
 .gitignore
 
-Models_Configs.txt
-test_cuda.py
 README.md
 
-Homepage_Cache/
-Logs/
+app/homepage_cache/
+app/logs/
+app/tests/
+
+app/cores/download_configs.txt
+app/models/models_phobert/download_models.txt
