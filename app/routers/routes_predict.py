@@ -85,8 +85,8 @@ async def predict(input_data: List[InputEntry]):
     label_map = {
         "gambling": "Cờ bạc",
         "movies": "Phim lậu"
-        # "ecommerce": "Cờ bạc",
-        # "services": "Cờ bạc"
+        # "ecommerce": "Quảng cáo bán hàng",
+        # "services": "Quảng cáo bán hàng"
     }
 
     for i, (entry, domain) in enumerate(zip(input_data, unique_domains)):
